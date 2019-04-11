@@ -102,24 +102,34 @@ class CoordinateSystem(object):
 class VoxelSpace(CoordinateSystem):
     def __init__(
             self,
-            voxel_size: Tuple[int] = (1, 1, 1),
-            shape: Tuple[int] = (1, 1, 1),
+            voxel_sizes: Tuple[float, ...],
+            shape: Tuple[int, ...],
             axes: CoordinateSystemAxes = _DEFAULT_AXES,
     ):
         """Voxel space coordinate system
 
         Compared to other coordinate systems, a voxel space also keeps the
-        voxel size and the shape of the reference image.
+        voxel sizes and the shape of the reference image.
 
         Args:
-            voxel_size: The voxel size in mm of the reference image.
+            voxel_sizes: The voxel size in mm of the reference image.
             shape: The shape of the reference image.
             axes: The order and orientation of the axes.
 
         """
         super().__init__(CoordinateSystemSpace.VOXEL, axes)
         self._shape = shape
-        self._voxel_size = voxel_size
+        self._voxel_sizes = voxel_sizes
+
+    @property
+    def shape(self):
+        """Returns the shape of the reference volume"""
+        return self._shape
+
+    @property
+    def voxel_sizes(self):
+        """Returns the voxel sizes of the reference volume"""
+        return self._voxel_sizes
 
 
 def coord(
@@ -158,6 +168,8 @@ def coord(
         axes = CoordinateSystemAxes(axes)
 
     if space == CoordinateSystemSpace.VOXEL:
+        voxel_size = voxel_size if voxel_size is not None else (1, 1, 1)
+        shape = shape if shape is not None else (1, 1, 1)
         coordinate_system = VoxelSpace(voxel_size, shape, axes)
     else:
 
