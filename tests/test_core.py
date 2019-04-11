@@ -3,11 +3,12 @@ from unittest import TestCase
 import numpy as np
 
 from nicoord import AffineTransform
+from nicoord import AffineTransformable
 from nicoord import CoordinateSystem
 from nicoord import CoordinateSystemAxes
 from nicoord import CoordinateSystemSpace
+from nicoord import coord
 from nicoord import inverse
-from nicoord import AffineTransformable
 
 
 class TestCoordinateSystem(TestCase):
@@ -29,9 +30,9 @@ class TestCoordinateSystem(TestCase):
 
         # Verify wrong input types.
         self.assertRaises(TypeError, CoordinateSystem, axes=None)
-        self.assertRaises(ValueError, CoordinateSystem, axes='RAS')
+        self.assertRaises(TypeError, CoordinateSystem, axes='RAS')
         self.assertRaises(TypeError, CoordinateSystem, space=None)
-        self.assertRaises(ValueError, CoordinateSystem, space='NATIVE')
+        self.assertRaises(TypeError, CoordinateSystem, space='NATIVE')
 
     def test_repr(self):
         """Test the __repr__ method"""
@@ -41,29 +42,6 @@ class TestCoordinateSystem(TestCase):
             'CoordinateSystem(CoordinateSystemSpace.VOXEL, '
             'CoordinateSystemAxes.RAS)')
         self.assertEqual(expected_repr, repr(coordinate_system))
-
-    def test_from_string(self):
-        """Test the from_string method"""
-
-        coordinate_system = CoordinateSystem.from_string('voxel-ras')
-        expected = CoordinateSystem(
-            CoordinateSystemSpace.VOXEL, CoordinateSystemAxes.RAS)
-        self.assertEqual(expected, coordinate_system)
-
-        coordinate_system = CoordinateSystem.from_string('native-ras')
-        expected = CoordinateSystem(
-            CoordinateSystemSpace.NATIVE, CoordinateSystemAxes.RAS)
-        self.assertEqual(expected, coordinate_system)
-
-        coordinate_system = CoordinateSystem.from_string('voxel-lps')
-        expected = CoordinateSystem(
-            CoordinateSystemSpace.VOXEL, CoordinateSystemAxes.LPS)
-        self.assertEqual(expected, coordinate_system)
-
-        coordinate_system = CoordinateSystem.from_string('native-lps')
-        expected = CoordinateSystem(
-            CoordinateSystemSpace.NATIVE, CoordinateSystemAxes.LPS)
-        self.assertEqual(expected, coordinate_system)
 
 
 class TestAffineTransform(TestCase):
@@ -100,7 +78,8 @@ class TestAffineTransform(TestCase):
         np.testing.assert_array_equal(affine, transform.affine)
 
         # We can also use string for the source and target.
-        transform = AffineTransform('voxel-ras', 'native-ras', affine)
+        transform = AffineTransform(
+            coord('voxel', 'ras'), coord('native', 'ras'), affine)
         self.assertEqual(source, transform.source)
         self.assertEqual(target, transform.target)
         np.testing.assert_array_equal(affine, transform.affine)
@@ -260,7 +239,7 @@ class TestAffineTransformable(TestCase):
         self.assertEqual(transformable.coordinate_system, source)
 
         # If is also possible to use a string instead of a coordinate system.
-        transformable = SampleAffineTransformable('native-ras')
+        transformable = SampleAffineTransformable(coord('native', 'ras'))
         self.assertEqual(transformable.coordinate_system, source)
 
     def test_add_transform(self):
@@ -326,8 +305,8 @@ class TestAffineTransformable(TestCase):
         np.testing.assert_array_almost_equal(np.eye(3), transformable.vertices)
 
         # We can also use string to give the target.
-        transformable.transform_to('native-ras')
-        transformable.transform_to('voxel-ras')
+        transformable.transform_to(coord('native', 'ras'))
+        transformable.transform_to(coord('voxel', 'ras'))
         np.testing.assert_array_almost_equal(np.eye(3), transformable.vertices)
 
         # We can't transform to a space for which there is no affine.

@@ -7,6 +7,7 @@ from typing import List
 from typing import Optional
 from typing import Tuple
 from typing import Union
+from warnings import warn
 
 import numpy as np
 
@@ -22,10 +23,16 @@ class CoordinateSystemSpace(Enum):
     NATIVE = 'native'
 
 
+# The default space and axes.
+_DEFAULT_SPACE = CoordinateSystemSpace.VOXEL
+_DEFAULT_AXES = CoordinateSystemAxes.RAS
+
+
 class CoordinateSystem(object):
-    def __init__(self,
-                 space: Union[CoordinateSystemSpace, str] = 'voxel',
-                 axes: Union[CoordinateSystemAxes, str] = 'ras'):
+    def __init__(
+            self,
+            space: CoordinateSystemSpace = _DEFAULT_SPACE,
+            axes: CoordinateSystemAxes = _DEFAULT_AXES):
         """A neuroimaging coordinate system
 
         Neuroimaging coordinate system is defined by the orientation and
@@ -39,49 +46,17 @@ class CoordinateSystem(object):
 
         """
 
-        if isinstance(space, str):
-            space = CoordinateSystemSpace(space)
-        elif not isinstance(space, CoordinateSystemSpace):
+        if not isinstance(space, CoordinateSystemSpace):
             raise TypeError(
                 f'The space must be a CoordinateSystemSpace, '
                 f'not a {type(space)}.')
         self._space = space
 
-        if isinstance(axes, str):
-            axes = CoordinateSystemAxes(axes)
-        elif not isinstance(axes, CoordinateSystemAxes):
+        if not isinstance(axes, CoordinateSystemAxes):
             raise TypeError(
                 f'The axes orientation and order must be a '
                 f'CoordinateSystemAxes, not a {type(axes)}.')
         self._axes = axes
-
-    @classmethod
-    def from_string(cls, string: str) -> 'CoordinateSystem':
-        """Creates a coordinate system from a string
-
-        This convenience class method allows the construction of a coordinate
-        system from a string. The format of the string must be '<space>-<axes>'
-        where <space> is 'voxel' or 'native' and <axes> is 'ras' or 'lps'.
-
-        Args:
-            string: The string used to construct the coordinate system.
-
-        Returns:
-            A coordinate system that corresponds to the string.
-
-        """
-
-        parts = string.split('-')
-
-        if len(parts) != 2:
-            raise ValueError(
-                f'The string "{string}" cannot be converted to a coordinate '
-                f'system.')
-
-        space = CoordinateSystemSpace(parts[0])
-        axes = CoordinateSystemAxes(parts[1])
-
-        return CoordinateSystem(space, axes)
 
     def __eq__(self, other: 'CoordinateSystem') -> bool:
         """Equality between two coordinate systems
@@ -124,39 +99,107 @@ class CoordinateSystem(object):
         return self._space
 
 
+class VoxelSpace(CoordinateSystem):
+    def __init__(
+            self,
+            voxel_size: Tuple[int] = (1, 1, 1),
+            shape: Tuple[int] = (1, 1, 1),
+            axes: CoordinateSystemAxes = _DEFAULT_AXES,
+    ):
+        """Voxel space coordinate system
+
+        Compared to other coordinate systems, a voxel space also keeps the
+        voxel size and the shape of the reference image.
+
+        Args:
+            voxel_size: The voxel size in mm of the reference image.
+            shape: The shape of the reference image.
+            axes: The order and orientation of the axes.
+
+        """
+        super().__init__(CoordinateSystemSpace.VOXEL, axes)
+        self._shape = shape
+        self._voxel_size = voxel_size
+
+
+def coord(
+        space: Union[CoordinateSystemSpace, str] = 'voxel',
+        axes: Union[CoordinateSystemAxes, str] = 'ras',
+        voxel_size: Optional[Tuple[int]] = None,
+        shape: Optional[Tuple[int]] = None,
+) -> CoordinateSystem:
+    """Returns a coordinate system
+
+    This convenience function provides a simple way to create coordinate
+    systems. The returned value may be a CoordinateSystem or one of its
+    subclasses, depending on the input parameters.
+
+    Args:
+        space: The space of the coordinate system. If a string is provided, it
+            must be 'voxel', 'native', or 'unknown'.
+        axes: The order and orientation of the axes. If a string is provided,
+            it must be 'ras' or 'lps'.
+        voxel_size: The voxel size in mm of the reference image. It should only
+            be provided if the space is voxel.
+        shape: The shape of the reference image. It should only be provided
+            if the space is voxel.
+
+    Returns:
+        A CoordinateSystem with the desired space and axes. If the space is
+        CoordinateSystemSpace.VOXEL or 'voxel', a VoxelSpace is returned
+        instead.
+
+    """
+
+    if isinstance(space, str):
+        space = CoordinateSystemSpace(space)
+
+    if isinstance(axes, str):
+        axes = CoordinateSystemAxes(axes)
+
+    if space == CoordinateSystemSpace.VOXEL:
+        coordinate_system = VoxelSpace(voxel_size, shape, axes)
+    else:
+
+        if voxel_size is not None:
+            warn(f'The voxel space is {space}, but a voxel size was '
+                 f'provided. It will be ignored.')
+
+        if shape is not None:
+            warn(f'The voxel space is {space}, but a shape was '
+                 f'provided. It will be ignored.')
+
+        coordinate_system = CoordinateSystem(space, axes)
+
+    return coordinate_system
+
+
 class AffineTransform(object):
-    def __init__(self,
-                 source: Union[CoordinateSystem, str],
-                 target: Union[CoordinateSystem, str],
-                 affine: Any):
+    def __init__(
+            self,
+            source: CoordinateSystem,
+            target: CoordinateSystem,
+            affine: Any):
         """An affine transformation between two coordinate systems
 
         An affine transform allows coordinates (or points) to be converted
         from one coordinate system to another.
 
         Args:
-            source: The initial coordinate system of the coordinates. Can be
-                specified using a string, see CoordinateSystem.from_string for
-                valid string formats.
-            target: The coordinate system after application of the affine. Can
-                be specified using a string, see CoordinateSystem.from_string
-                for valid string formats.
+            source: The initial coordinate system of the coordinates.
+            target: The coordinate system after application of the affine.
             affine: The matrix representation of the affine. Must be
                 convertible to a numpy array of floats with a shape of (4, 4).
 
         """
 
-        if isinstance(source, str):
-            source = CoordinateSystem.from_string(source)
-        elif not isinstance(source, CoordinateSystem):
+        if not isinstance(source, CoordinateSystem):
             raise TypeError(
                 f'The source must be a CoordinateSystem, not a '
                 f'{type(source)}.')
         self._source = source
 
-        if isinstance(target, str):
-            target = CoordinateSystem.from_string(target)
-        elif not isinstance(target, CoordinateSystem):
+        if not isinstance(target, CoordinateSystem):
             raise TypeError(
                 f'The target must be a CoordinateSystem, not a '
                 f'{type(target)}.')
@@ -265,7 +308,7 @@ class AffineTransform(object):
 class AffineTransformable(ABC):
     def __init__(
             self,
-            coordinate_system: Optional[Union[CoordinateSystem, str]] = None,
+            coordinate_system: Optional[CoordinateSystem] = None,
             transforms: Optional[Iterable[AffineTransform]] = None):
         """Objects that can be transformed using an affine
 
@@ -278,17 +321,12 @@ class AffineTransformable(ABC):
 
         Args:
             coordinate_system: The current coordinate system of the points. If
-                not provided, a VOXEL RAS coordinate system is assumed. Can be
-                specified using a string, see CoordinateSystem.from_string for
-                valid string formats.
+                not provided, a VOXEL RAS coordinate system is assumed.
             transforms: The affine transformations to other coordinate systems.
 
         """
 
         coordinate_system = coordinate_system or CoordinateSystem()
-        if isinstance(coordinate_system, str):
-            coordinate_system = CoordinateSystem.from_string(coordinate_system)
-
         transforms = transforms or []
 
         self._coordinate_system: CoordinateSystem = coordinate_system
@@ -335,7 +373,7 @@ class AffineTransformable(ABC):
 
         self._transforms.append(transform)
 
-    def transform_to(self, coordinate_system: Union[CoordinateSystem, str]):
+    def transform_to(self, coordinate_system: CoordinateSystem):
         """Transforms the points to a new coordinate system
 
         Transforms the points of an object from one coordinate system to
@@ -343,13 +381,9 @@ class AffineTransformable(ABC):
         system available.
 
         Args:
-            coordinate_system: The coordinate system to transform to. See the
-                CoordinateSystem.from_string for acceptable string values.
+            coordinate_system: The coordinate system to transform to.
 
         """
-
-        if isinstance(coordinate_system, str):
-            coordinate_system = CoordinateSystem.from_string(coordinate_system)
 
         if self.coordinate_system == coordinate_system:
             return
